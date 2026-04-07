@@ -1,0 +1,117 @@
+# Beep is a Lisp implemented in Teeny
+
+lexer = (code) => `[()]|"(?:[^"]*)"|'(?:[^']*)'|[^\s()]+`.find(code);
+parser = (tokens) => match tokens[0] {
+    "(": {
+        tokens.pop!(0)
+        res = []
+        while tokens[0] != ")" {
+            res.push!(parser(tokens))
+        }
+        tokens.pop!(0)
+        res
+    },
+    _: {
+        res = tokens.pop!(0)
+        if res[0] == "'" || res[0] == '"' {
+            ["STR", res[1..(res.len() - 1)]]
+        } elif res.number?() {
+            ["NUM", number(res)]
+        } else {
+            ["SYM", res]
+        }
+    }
+}
+env = (outer = nil, val = []) => {
+    value = val;
+    [
+        "take": (name) => {
+            if value.keys().has?(name) { value[name] }
+            elif outer == nil { nil }
+            else outer.take(name)
+        },
+        "find": (name) => {
+            if value.keys().has?(name) { 1 }
+            elif outer == nil { 0 }
+            else outer.find(name)
+        },
+        "assign": (name, val) => {
+            if value.keys().has?(name) { value[name] = val }
+            else outer.assign(name, val)
+        },
+        "define": (name, val) => {
+            value[name] = val;
+            val
+        }
+    ]
+}
+gEnv = env(nil, [
+    "+": (a, b) => a + b,
+    "-": (a, b) => a - b,
+    "*": (a, b) => a * b,
+    "/": (a, b) => a / b,
+    "<": (a, b) => a < b,
+    ">": (a, b) => a > b,
+    "<=": (a, b) => a <= b,
+    ">=": (a, b) => a >= b,
+    "=": (a, b) => a == b,
+    "!=": (a, b) => a != b,
+    "block": (...x) => x[x.len() - 1]
+])
+
+fun = (params, body, cEnv) => {
+    [
+        "_call_": (...args) => {
+            val = table.zip(params, args);
+            res = []; for i in table.zip(params, args) res[i[0]] = i[1];
+            nEnv = env(cEnv, res)
+            interpreter(body, nEnv)
+        }
+    ]
+}
+mac = (params, body, cEnv) => {
+    [
+        "_call_": (...args) => {
+            val = table.zip(params, args);
+            res = []; for i in table.zip(params, args) res[i[0]] = i[1];
+            nEnv = env(cEnv, res)
+            interpreter(body, nEnv)
+        },
+        "_type_": "macro"
+    ]
+}
+
+interpreter = (ast, cEnv) => match ast[0] {
+    "STR": ast[1],
+    "NUM": ast[1],
+    "SYM": cEnv.take(ast[1]),
+    _: {
+        op = ast[0]
+        match op {
+            ["SYM", "def"]: cEnv.define(ast[1][1], interpreter(ast[2], cEnv)),
+            ["SYM", "set"]: cEnv.assign(ast[1][1], interpreter(ast[2], cEnv)),
+            ["SYM", "if"]: {
+                val = interpreter(ast[1], cEnv)
+                if val {
+                    interpreter(ast[2], cEnv)
+                } else {
+                    interpreter(ast[3], cEnv)
+                }
+            },
+            ["SYM", "fn"]: fun(ast[1].map(item => item[1]), ast[2], cEnv),
+            ["SYM", "mac"]: mac(ast[1].map(item => item[1]), ast[2], cEnv),
+            _: {
+                f = interpreter(ast[0], cEnv);
+                if type(f) == "table" && f["_type_"] == "macro" {
+                    ast.pop!(0);
+                } else {
+                    # print(ast[0][1], f)
+                    ast.pop!(0);
+                    f(...(ast.map(item => interpreter(item, cEnv))))
+                }
+            }
+        }
+    }
+}
+
+print(interpreter(parser(lexer("((fn (x) 1) 1)")), gEnv))
