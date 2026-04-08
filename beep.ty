@@ -75,7 +75,10 @@ mac = (params, body, cEnv) => {
             val = table.zip(params, args);
             res = []; for i in table.zip(params, args) res[i[0]] = i[1];
             nEnv = env(cEnv, res)
-            interpreter(body, nEnv)
+            println(body)
+            res = interpreter(body, nEnv)
+            println(res)
+            res
         },
         "_type_": "macro"
     ]
@@ -104,6 +107,7 @@ interpreter = (ast, cEnv) => match ast[0] {
                 f = interpreter(ast[0], cEnv);
                 if type(f) == "table" && f["_type_"] == "macro" {
                     ast.pop!(0);
+                    interpreter(f(ast), cEnv)
                 } else {
                     # print(ast[0][1], f)
                     ast.pop!(0);
@@ -114,4 +118,4 @@ interpreter = (ast, cEnv) => match ast[0] {
     }
 }
 
-print(interpreter(parser(lexer("((fn (x) 1) 1)")), gEnv))
+print(interpreter(parser(lexer("((mac (x) x) 1)")), gEnv))
